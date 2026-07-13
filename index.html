@@ -6,6 +6,7 @@
 <title>ANIS Circuit Simulator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -51,6 +52,13 @@
     <div class="simstat" id="simstat"><span class="dot"></span><span id="simstat-text">idle</span></div>
 
     <div class="tb-spacer"></div>
+
+    <button class="tbtn ghost theme-toggle" id="btn-theme" title="Toggle light / dark theme" aria-label="Toggle light / dark theme">
+      <i class="fa-solid fa-sun theme-icon theme-icon-sun"></i>
+      <i class="fa-solid fa-moon theme-icon theme-icon-moon"></i>
+    </button>
+
+    <div class="topbar-div"></div>
 
     <div class="view-toggle" title="Toggle schematic / realistic rendering">
       <span class="vt-label on" id="lbl-schem">SCHEMATIC</span>
@@ -170,5 +178,31 @@
   </div>
 </footer>
 <script src="script.js"></script>
+<script>
+/* ============================================================
+   THEME (light / dark) — toggled via the fa-sun / fa-moon button.
+   Persists for the session and follows the OS preference on
+   first load. Notifies script.js (window.onThemeChange) so the
+   canvas-drawn schematic can restyle its hardcoded colors too.
+============================================================ */
+(function(){
+  function systemPrefersLight(){
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+  }
+  function applyTheme(theme){
+    document.documentElement.setAttribute('data-theme', theme);
+    try { sessionStorage.setItem('voltra-theme', theme); } catch(e){}
+    if (typeof window.onThemeChange === 'function') window.onThemeChange(theme);
+  }
+  let saved = null;
+  try { saved = sessionStorage.getItem('voltra-theme'); } catch(e){}
+  applyTheme(saved || (systemPrefersLight() ? 'light' : 'dark'));
+
+  document.getElementById('btn-theme').addEventListener('click', function(){
+    const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    applyTheme(current === 'light' ? 'dark' : 'light');
+  });
+})();
+</script>
 </body>
 </html>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ANIS Circuit Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============================== TOPBAR ============================== -->
+  <div id="topbar">
+    <div class="brand"><div class="mark"></div>ANIS<small>Circuit Simulator</small></div>
+    <div class="topbar-div"></div>
+
+    <button class="tbtn ghost" id="btn-new" title="New circuit">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New
+    </button>
+    <button class="tbtn ghost" id="btn-open" title="Open example / load file">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h5l2 2h11v10H3z"/></svg>Open
+    </button>
+    <button class="tbtn ghost" id="btn-save" title="Save circuit as JSON">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>Save
+    </button>
+    <input type="file" id="fileinput" accept="application/json" class="hidden">
+
+    <div class="topbar-div"></div>
+
+    <button class="tbtn primary" id="btn-run" title="Run transient simulation (Space)">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Run
+    </button>
+    <button class="tbtn ghost" id="btn-dc" title="Solve DC operating point">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>DC Solve
+    </button>
+
+    <div class="speed-control" title="Simulation speed">
+      <label>Speed</label>
+      <select id="sim-speed">
+        <option value="0.25">0.25×</option>
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+        <option value="8">8×</option>
+      </select>
+    </div>
+
+    <div class="simstat" id="simstat"><span class="dot"></span><span id="simstat-text">idle</span></div>
+
+    <div class="tb-spacer"></div>
+
+    <div class="view-toggle" title="Toggle schematic / realistic rendering">
+      <span class="vt-label on" id="lbl-schem">SCHEMATIC</span>
+      <div class="rocker" id="viewrocker"><div class="knob"></div></div>
+      <span class="vt-label" id="lbl-real">REALISTIC</span>
+    </div>
+
+    <div class="topbar-div"></div>
+    <button class="tbtn ghost" id="btn-zoomout" title="Zoom out">−</button>
+    <span id="zoomreadout">100%</span>
+    <button class="tbtn ghost" id="btn-zoomin" title="Zoom in">+</button>
+    <button class="tbtn ghost" id="btn-fit" title="Fit to screen">Fit</button>
+  </div>
+
+  <!-- ============================== MAIN ============================== -->
+  <div id="main">
+
+    <!-- PARTS PALETTE -->
+    <div id="palette">
+      <div class="palette-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="partsearch" placeholder="Search parts…">
+      </div>
+      <div id="palette-root"></div>
+    </div>
+
+    <!-- CANVAS STAGE -->
+    <div id="stage-wrap">
+      <canvas id="gridcanvas"></canvas>
+      <canvas id="wirecanvas"></canvas>
+      <canvas id="compcanvas"></canvas>
+      <canvas id="overlaycanvas"></canvas>
+      <div class="stage-toolbar">
+        <button id="st-select" title="Select tool (V)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l7 17 2-7 7-2z"/></svg></button>
+        <button id="st-wire" title="Wire tool (W)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M6.5 17.5L17.5 6.5"/></svg></button>
+        <button id="st-probe" title="Voltage probe (P)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6M12 22v-8M6 14h12l-2-4H8z"/></svg></button>
+        <button id="st-delete" title="Delete selection (Del)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/></svg></button>
+      </div>
+      <div id="hint">Drag a part onto the grid to place it. Click a terminal to start a wire.</div>
+      <div id="coordread">x:0.00  y:0.00</div>
+      <div id="draglabel"></div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div id="rightpanel">
+      <div class="rp-tabs">
+        <div class="rp-tab active" data-pane="pane-props">Properties</div>
+        <div class="rp-tab" data-pane="pane-netlist">Netlist</div>
+        <div class="rp-tab" data-pane="pane-console">Console</div>
+      </div>
+      <div class="rp-pane active" id="pane-props">
+        <div class="prop-empty" id="prop-empty">Select a component<br>to edit its properties.</div>
+        <div id="prop-content" class="hidden"></div>
+      </div>
+      <div class="rp-pane" id="pane-netlist">
+        <div class="netlist-actions">
+          <button class="tbtn ghost" id="btn-netlist-refresh">↻ Rebuild</button>
+          <button class="tbtn ghost" id="btn-netlist-copy">⧉ Copy</button>
+        </div>
+        <div id="netlist-out">* Netlist will appear here once&#10;* the circuit has nodes.</div>
+      </div>
+      <div class="rp-pane" id="pane-console">
+        <div id="console-out"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== BOTTOM ============================== -->
+  <div id="bottom">
+    <div id="scope-wrap">
+      <div id="scope-head">
+        <div class="ch" id="scope-legend"></div>
+        <div id="scope-timebase">10 ms/div</div>
+      </div>
+      <canvas id="scopecanvas"></canvas>
+    </div>
+    <div id="meters">
+      <div class="meters-title">Live Meters</div>
+      <div class="meter-grid" id="meter-grid">
+        <div class="meter-empty">Place probes or run simulation to see readings.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast-wrap" id="toastwrap"></div>
+
+<div id="ctxmenu">
+  <div class="ci" id="ctx-rotate">Rotate <kbd>R</kbd></div>
+  <div class="ci" id="ctx-flip">Flip <kbd>F</kbd></div>
+  <div class="ci" id="ctx-dup">Duplicate <kbd>⌘D</kbd></div>
+  <hr>
+  <div class="ci danger" id="ctx-delete">Delete <kbd>Del</kbd></div>
+</div>
+
+<div id="modal-backdrop">
+  <div id="modal">
+    <div class="modal-head"><h3>Example Circuits</h3><button id="modal-close">×</button></div>
+    <div class="modal-body">
+      <div class="examples-grid" id="examples-grid"></div>
+    </div>
+  </div>
+</div>
+<!-- ============================== FOOTER ============================== -->
+<footer id="footer">
+  <div class="footer-left">
+    <span class="status-indicator"></span>
+    <span>ANIS Circuit Engine v1.0.4</span>
+  </div>
+  <div class="footer-center">
+    <span>Shortcuts: <kbd>Space</kbd> Run &nbsp;•&nbsp; <kbd>W</kbd> Wire &nbsp;•&nbsp; <kbd>V</kbd> Select &nbsp;•&nbsp; <kbd>R</kbd> Rotate</span>
+  </div>
+  <div class="footer-right">
+    <a href="https://github.com/AnisurRahmanJU/Anis-Circuit-Simulator" id="link-docs" target="_blank">Github Repo</a>
+    <a href="https://www.grameenphone.academy/public-profile/GP153876" id="link-about" target="_blank">About Me</a>
+  </div>
+</footer>
+<script src="script.js"></script>
+</body>
+</html>

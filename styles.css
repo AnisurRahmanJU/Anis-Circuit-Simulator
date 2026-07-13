@@ -1,4 +1,3 @@
-
 /* ============================================================
    VOLTRA CIRCUIT BENCH — CORE STYLESHEET
    Design tokens:
@@ -15,6 +14,17 @@
      amber  #eab24d   warning / power accent
      red    #e2555a   danger / delete
    Fonts: Space Grotesk (display/ui), JetBrains Mono (values/netlist/data)
+
+   THEME SUPPORT
+   ---------------------------------------------------------
+   The dark palette above lives in :root as the default. A
+   [data-theme="light"] override block (further down) redefines
+   every token for a light chassis. index.html's inline script
+   toggles the `data-theme` attribute on <html> and also calls
+   window.onThemeChange(theme) — script.js listens for that to
+   restyle the canvas-drawn schematic (grid dots, wire color,
+   component strokes) since those are painted with JS, not CSS,
+   and can't pick up custom-property changes on their own.
 ============================================================ */
 
 :root{
@@ -29,11 +39,22 @@
   --disp:'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ---------- LIGHT THEME OVERRIDES ---------- */
+[data-theme="light"]{
+  --bg-0:#f4f5f8; --bg-1:#ffffff; --bg-2:#eef0f4; --bg-3:#e4e7ee;
+  --line:#d7dbe3; --line-soft:#e4e7ee;
+  --text-0:#1c212b; --text-1:#555f72; --text-2:#8791a3;
+  --copper:#a85f2e; --copper-bright:#c17a4a;
+  --teal:#0f9e8f; --teal-dim:#0c7e72;
+  --amber:#b8811f; --red:#c73c41; --green:#2f9a55;
+}
+
 *{box-sizing:border-box;}
 html,body{height:100%;}
 body{
   margin:0; background:var(--bg-0); color:var(--text-0);
   font-family:var(--disp); overflow:auto; -webkit-font-smoothing:antialiased;
+  transition:background .15s ease, color .15s ease;
 }
 ::selection{background:var(--teal-dim); color:#fff;}
 button{font-family:var(--disp);}
@@ -56,7 +77,7 @@ input, select{font-family:var(--mono);}
 /* ============================== TOPBAR ============================== */
 #topbar{
   grid-row:1; display:flex; align-items:center; gap:14px;
-  background:linear-gradient(180deg,#1c212b,#171b23);
+  background:linear-gradient(180deg,var(--bg-2),var(--bg-1));
   border-bottom:1px solid var(--line); padding:0 16px;
   position:relative; z-index:30;
 }
@@ -94,6 +115,15 @@ input, select{font-family:var(--mono);}
 .tbtn.ghost:hover{background:var(--bg-2); border-color:var(--line);}
 .tbtn.active{background:var(--teal-dim); border-color:var(--teal); color:#eafffb;}
 .tbtn[disabled]{opacity:.4; cursor:not-allowed; pointer-events:none;}
+
+/* theme toggle icon swap — only the icon matching the *current*
+   theme is shown (moon while dark, sun while light) */
+.theme-toggle{position:relative;}
+.theme-icon{font-size:14px;}
+.theme-icon-moon{display:inline-block;}
+.theme-icon-sun{display:none;}
+[data-theme="light"] .theme-icon-sun{display:inline-block; color:var(--amber);}
+[data-theme="light"] .theme-icon-moon{display:none;}
 
 /* realistic/schematic rocker toggle — signature element */
 .view-toggle{
@@ -186,12 +216,12 @@ input, select{font-family:var(--mono);}
   position:absolute; top:0; left:0;
 }
 #hint{
-  position:absolute; left:14px; bottom:12px; background:rgba(25,29,37,.85); backdrop-filter:blur(4px);
+  position:absolute; left:14px; bottom:12px; background:color-mix(in srgb, var(--bg-1) 85%, transparent); backdrop-filter:blur(4px);
   border:1px solid var(--line); border-radius:var(--radius); padding:7px 11px; font-size:11px;
   color:var(--text-1); font-family:var(--mono); pointer-events:none; max-width:340px; line-height:1.5;
 }
 #coordread{
-  position:absolute; right:14px; bottom:12px; background:rgba(25,29,37,.85); backdrop-filter:blur(4px);
+  position:absolute; right:14px; bottom:12px; background:color-mix(in srgb, var(--bg-1) 85%, transparent); backdrop-filter:blur(4px);
   border:1px solid var(--line); border-radius:var(--radius); padding:6px 10px; font-size:11px;
   color:var(--text-2); font-family:var(--mono); pointer-events:none;
 }
@@ -199,7 +229,7 @@ input, select{font-family:var(--mono);}
   position:absolute; top:12px; left:14px; display:flex; flex-direction:column; gap:6px; z-index:10;
 }
 .stage-toolbar button{
-  width:30px; height:30px; border-radius:var(--radius); background:rgba(31,37,48,.9); border:1px solid var(--line);
+  width:30px; height:30px; border-radius:var(--radius); background:color-mix(in srgb, var(--bg-2) 90%, transparent); border:1px solid var(--line);
   color:var(--text-1); cursor:pointer; display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);
 }
 .stage-toolbar button:hover{color:var(--text-0); border-color:var(--copper);}
@@ -296,7 +326,7 @@ input, select{font-family:var(--mono);}
 /* ============================== drag ghost / misc ============================== */
 #draglabel{
   position:fixed; pointer-events:none; z-index:999; font-family:var(--mono); font-size:11px;
-  color:var(--teal); background:rgba(20,24,31,.9); border:1px solid var(--teal-dim); border-radius:4px;
+  color:var(--teal); background:color-mix(in srgb, var(--bg-0) 90%, transparent); border:1px solid var(--teal-dim); border-radius:4px;
   padding:3px 7px; display:none;
 }
 

@@ -1,4 +1,3 @@
-
 /* ============================================================
    VOLTRA — application script begins.
    Sections:
@@ -25,6 +24,7 @@ const SNAP = 0.5;                // snap to half grid units (matches component t
 
 const state = {
   view: 'schematic',             // 'schematic' | 'realistic'
+  theme: 'dark',                 // 'dark' | 'light' — kept in sync with <html data-theme>
   tool: 'select',                // 'select' | 'wire' | 'probe' | 'delete'
   zoom: 1,
   pan: {x: 0, y: 0},
@@ -43,6 +43,18 @@ const state = {
   nextId: 1,
   clipboard: null,
 };
+
+/* ---- theme-aware palette used by canvas-drawn elements (grid,
+   wires, component outlines) since <canvas> paints can't read
+   CSS custom properties on their own. Kept in lockstep with the
+   :root / [data-theme="light"] tokens in styles.css. ---- */
+const THEME_COLORS = {
+  dark:  { bg:'#12151b', gridDot:'rgba(154,164,184,0.14)', gridLine:'rgba(154,164,184,0.05)',
+           compStroke:'#c7cbd6', wire:'#7f8ba0', junction:'#7f8ba0' },
+  light: { bg:'#f4f5f8', gridDot:'rgba(60,68,88,0.16)', gridLine:'rgba(60,68,88,0.08)',
+           compStroke:'#2c3342', wire:'#556074', junction:'#556074' },
+};
+function themeColors(){ return THEME_COLORS[state.theme] || THEME_COLORS.dark; }
 
 function uid(prefix){ return prefix + (state.nextId++); }
 
@@ -750,12 +762,12 @@ function drawValueLabel(ctx, c, g, text){
   if (!c._showLabel) return;
   ctx.save();
   ctx.rotate(-c.rotation * Math.PI/2); // keep text upright regardless of comp rotation
-  ctx.fillStyle = 'rgba(154,164,184,.9)';
+  ctx.fillStyle = state.theme === 'light' ? 'rgba(85,95,114,.95)' : 'rgba(154,164,184,.9)';
   ctx.font = '10.5px var(--mono)';
   ctx.textAlign = 'center'; ctx.textBaseline = 'top';
   ctx.fillText(text, 0, 0.95*g);
   if (c.label){
-    ctx.fillStyle = 'rgba(233,236,243,.9)';
+    ctx.fillStyle = state.theme === 'light' ? 'rgba(28,33,43,.95)' : 'rgba(233,236,243,.9)';
     ctx.fillText(c.label, 0, -1.35*g);
   }
   ctx.restore();
@@ -1259,12 +1271,13 @@ function screenToWorld(x,y){
 function renderGrid(){
   const ctx = ctxs.grid;
   const w = stageWrap.clientWidth, h = stageWrap.clientHeight;
+  const tc = themeColors();
   ctx.clearRect(0,0,w,h);
-  ctx.fillStyle = '#12151b'; ctx.fillRect(0,0,w,h);
+  ctx.fillStyle = tc.bg; ctx.fillRect(0,0,w,h);
   const step = GRID*state.zoom;
   if (step < 4) return;
   const ox = state.pan.x % step, oy = state.pan.y % step;
-  ctx.fillStyle = 'rgba(154,164,184,0.14)';
+  ctx.fillStyle = tc.gridDot;
   const rad = state.zoom < 0.6 ? 0.6 : 1.1;
   for (let x = ox; x < w; x += step){
     for (let y = oy; y < h; y += step){
@@ -1272,7 +1285,7 @@ function renderGrid(){
     }
   }
   // major lines every 5 cells
-  ctx.strokeStyle = 'rgba(154,164,184,0.05)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = tc.gridLine; ctx.lineWidth = 1;
   const majorStep = step*5;
   const mox = state.pan.x % majorStep, moy = state.pan.y % majorStep;
   ctx.beginPath();
@@ -1290,6 +1303,7 @@ function renderWires(){
   const w = stageWrap.clientWidth, h = stageWrap.clientHeight;
   ctx.clearRect(0,0,w,h);
   const g = GRID*state.zoom;
+  const tc = themeColors();
   circuit.wires.forEach(wire=>{
     const p1 = worldToScreen(wire.x1, wire.y1), p2 = worldToScreen(wire.x2, wire.y2);
     ctx.lineCap = 'round';
@@ -1300,7 +1314,7 @@ function renderWires(){
       ctx.strokeStyle = isSel ? '#35d0c0' : '#d9a25c'; ctx.lineWidth = 2.2;
       ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
     } else {
-      ctx.strokeStyle = isSel ? '#35d0c0' : '#7f8ba0'; ctx.lineWidth = isSel ? 3 : 2;
+      ctx.strokeStyle = isSel ? '#35d0c0' : tc.wire; ctx.lineWidth = isSel ? 3 : 2;
       ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
     }
     if (state.running && wire._current){
@@ -1318,7 +1332,7 @@ function renderWires(){
       if (count > 1){
         const p = worldToScreen(x,y);
         ctx.beginPath(); ctx.arc(p.x,p.y, state.view==='realistic'?3.6:3.2, 0, Math.PI*2);
-        ctx.fillStyle = state.view==='realistic' ? '#d9a25c' : '#7f8ba0'; ctx.fill();
+        ctx.fillStyle = state.view==='realistic' ? '#d9a25c' : tc.junction; ctx.fill();
       }
     });
   });
@@ -1337,12 +1351,13 @@ function renderComponents(){
   const w = stageWrap.clientWidth, h = stageWrap.clientHeight;
   ctx.clearRect(0,0,w,h);
   const g = GRID*state.zoom;
+  const tc = themeColors();
   circuit.components.forEach(c=>{
     const p = worldToScreen(c.x, c.y);
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(c.rotation * Math.PI/2);
-    c._stroke = state.selection.has(c.id) ? '#35d0c0' : '#c7cbd6';
+    c._stroke = state.selection.has(c.id) ? '#35d0c0' : tc.compStroke;
     const def = COMP[c.type];
     if (state.selection.has(c.id)){
       ctx.save();
@@ -1416,6 +1431,7 @@ function buildPalette(filter){
   const root = document.getElementById('palette-root');
   root.innerHTML = '';
   const f = (filter||'').toLowerCase();
+  const tc = themeColors();
   COMP_CATEGORIES.forEach(cat=>{
     const items = Object.values(COMP).filter(d=>d.category===cat && d.label.toLowerCase().includes(f));
     if (!items.length) return;
@@ -1431,7 +1447,7 @@ function buildPalette(filter){
       const cv = document.createElement('canvas'); cv.width=64; cv.height=44;
       const pctx = cv.getContext('2d');
       pctx.translate(32,22); pctx.scale(1,1);
-      const fake = {type:def.type, params:Object.assign({},def.params), rotation:0, _stroke:'#c7cbd6', _showLabel:false};
+      const fake = {type:def.type, params:Object.assign({},def.params), rotation:0, _stroke:tc.compStroke, _showLabel:false};
       try{
         if (state.view==='realistic' && def.drawRealistic) def.drawRealistic(pctx, fake, 13);
         else def.drawSchematic(pctx, fake, 13);
@@ -2001,15 +2017,16 @@ function updateWireCurrents(){
 
 function renderScope(){
   const w = scopeCanvas.clientWidth, h = scopeCanvas.clientHeight;
+  const tc = themeColors();
   scopeCtx.clearRect(0,0,w,h);
-  scopeCtx.fillStyle = '#12151b'; scopeCtx.fillRect(0,0,w,h);
+  scopeCtx.fillStyle = tc.bg; scopeCtx.fillRect(0,0,w,h);
   // grid
-  scopeCtx.strokeStyle = 'rgba(154,164,184,.08)'; scopeCtx.lineWidth = 1;
+  scopeCtx.strokeStyle = tc.gridDot; scopeCtx.lineWidth = 1;
   scopeCtx.beginPath();
   for (let x=0;x<=w;x+=w/10){ scopeCtx.moveTo(x,0); scopeCtx.lineTo(x,h); }
   for (let y=0;y<=h;y+=h/8){ scopeCtx.moveTo(0,y); scopeCtx.lineTo(w,y); }
   scopeCtx.stroke();
-  scopeCtx.strokeStyle = 'rgba(154,164,184,.18)';
+  scopeCtx.strokeStyle = tc.gridLine;
   scopeCtx.beginPath(); scopeCtx.moveTo(0,h/2); scopeCtx.lineTo(w,h/2); scopeCtx.stroke();
 
   const keys = Object.keys(state.history.series);
@@ -2052,7 +2069,7 @@ function renderScope(){
   }).join('');
 }
 function drawScopeIdle(w,h){
-  scopeCtx.fillStyle = 'rgba(154,164,184,.4)'; scopeCtx.font = '11px var(--mono)';
+  scopeCtx.fillStyle = state.theme==='light' ? 'rgba(85,95,114,.6)' : 'rgba(154,164,184,.4)'; scopeCtx.font = '11px var(--mono)';
   scopeCtx.textAlign='center';
   scopeCtx.fillText('Run the simulation or add a probe to see live waveforms', w/2, h/2);
 }
@@ -2250,6 +2267,24 @@ document.getElementById('btn-fit').addEventListener('click', ()=>{
 });
 
 /* ============================================================
+   THEME SYNC — called by index.html's inline toggle script via
+   window.onThemeChange(theme). Canvas-drawn elements (grid dots,
+   wires, component strokes, scope background) don't automatically
+   pick up CSS custom-property changes, so we mirror the active
+   theme into `state.theme` and force a repaint + palette rebuild.
+   This is the fix for "dark/light theme toggle does nothing":
+   previously nothing ever re-rendered the canvases on toggle, and
+   styles.css had no [data-theme="light"] tokens to switch to.
+============================================================ */
+window.onThemeChange = function(theme){
+  state.theme = (theme === 'light') ? 'light' : 'dark';
+  buildPalette(document.getElementById('partsearch') ? document.getElementById('partsearch').value : '');
+  renderAll();
+  if (state.history && state.history.t && state.history.t.length) renderScope();
+  else if (scopeCtx) drawScopeIdle(scopeCanvas.clientWidth, scopeCanvas.clientHeight);
+};
+
+/* ============================================================
    12. BOOT
    Everything above only *defines* behavior — nothing actually
    ran on load in the original build (canvases were never sized,
@@ -2257,6 +2292,11 @@ document.getElementById('btn-fit').addEventListener('click', ()=>{
    to the toolbar). This section wires it all together.
 ============================================================ */
 function boot(){
+  // pick up whatever theme index.html's inline script already applied
+  // to <html data-theme="..."> before this script ran
+  const initialTheme = document.documentElement.getAttribute('data-theme');
+  state.theme = initialTheme === 'light' ? 'light' : 'dark';
+
   // populate the parts palette so components can be dragged out
   buildPalette('');
 

@@ -96,6 +96,30 @@ function parseEng(str){
   return n;
 }
 
+/* ---- multi-waveform generator for AC-type sources -----------
+   Supports sine, square, triangle and sawtooth, all phase-aligned
+   so switching waveform type at the same phase setting doesn't
+   jump the starting point around. `phaseDeg` shifts the waveform
+   by that many degrees of one period. ---- */
+function acWaveformValue(type, amplitude, freqHz, phaseDeg, t){
+  const f = Math.max(1e-6, freqHz);
+  let x = (f * t) + ((phaseDeg||0) / 360); // phase in cycles
+  x = x - Math.floor(x); // wrap to [0,1)
+  switch(type){
+    case 'square':
+      return x < 0.5 ? amplitude : -amplitude;
+    case 'triangle':
+      if (x < 0.25) return amplitude * (4*x);
+      if (x < 0.75) return amplitude * (2 - 4*x);
+      return amplitude * (4*x - 4);
+    case 'sawtooth':
+      return amplitude * (2*((x + 0.5) % 1) - 1);
+    case 'sine':
+    default:
+      return amplitude * Math.sin(2*Math.PI*x);
+  }
+}
+
 function log(msg, kind){
   const el = document.getElementById('console-out');
   const line = document.createElement('div');
@@ -388,8 +412,9 @@ defComp('battery', {
 defComp('acsource', {
   label:'AC Source', category:'Sources', icon:'~',
   terminals: twoTerm(3),
-  params:{ amplitude: 5, frequency: 60, phase: 0 },
+  params:{ amplitude: 5, frequency: 60, phase: 0, waveform: 'sine' },
   paramDefs:[
+    {key:'waveform', label:'Waveform', type:'select', options:['sine','square','triangle','sawtooth']},
     {key:'amplitude', label:'Amplitude', unit:'V', type:'eng'},
     {key:'frequency', label:'Frequency', unit:'Hz', type:'eng'},
     {key:'phase', label:'Phase', unit:'deg', type:'eng'}
@@ -398,13 +423,10 @@ defComp('acsource', {
     ctx.strokeStyle = c._stroke; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(-1.5*g,0); ctx.lineTo(-0.6*g,0); ctx.moveTo(0.6*g,0); ctx.lineTo(1.5*g,0); ctx.stroke();
     ctx.beginPath(); ctx.arc(0,0,0.6*g,0,Math.PI*2); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-0.32*g,0.12*g);
-    ctx.bezierCurveTo(-0.18*g,-0.3*g, -0.06*g,-0.3*g, 0,0);
-    ctx.bezierCurveTo(0.06*g,0.3*g, 0.18*g,0.3*g, 0.32*g,-0.12*g);
-    ctx.stroke();
+    ctx.strokeStyle = c._stroke;
+    drawWaveIcon(ctx, c.params.waveform||'sine', 0.34*g, 0.32*g);
     drawTermDots(ctx,c,g);
-    drawValueLabel(ctx,c,g, fmtEng(c.params.amplitude,'V')+' @ '+fmtEng(c.params.frequency,'Hz'));
+    drawValueLabel(ctx,c,g, fmtEng(c.params.amplitude,'V')+' @ '+fmtEng(c.params.frequency,'Hz')+' '+(c.params.waveform||'sine'));
   },
   drawRealistic(ctx,c,g){
     ctx.save();
@@ -415,14 +437,10 @@ defComp('acsource', {
     ctx.beginPath(); ctx.arc(0,0,0.62*g,0,Math.PI*2); ctx.fillStyle = grad; ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = '#7f8ba0'; ctx.stroke();
     ctx.strokeStyle = '#35d0c0'; ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(-0.34*g,0.14*g);
-    ctx.bezierCurveTo(-0.2*g,-0.32*g, -0.06*g,-0.32*g, 0,0);
-    ctx.bezierCurveTo(0.06*g,0.32*g, 0.2*g,0.32*g, 0.34*g,-0.14*g);
-    ctx.stroke();
+    drawWaveIcon(ctx, c.params.waveform||'sine', 0.36*g, 0.34*g);
     ctx.restore();
     drawTermDots(ctx,c,g,true);
-    drawValueLabel(ctx,c,g, fmtEng(c.params.amplitude,'V')+' @ '+fmtEng(c.params.frequency,'Hz'));
+    drawValueLabel(ctx,c,g, fmtEng(c.params.amplitude,'V')+' @ '+fmtEng(c.params.frequency,'Hz')+' '+(c.params.waveform||'sine'));
   }
 });
 
@@ -758,6 +776,30 @@ function drawTermDots(ctx, c, g, realistic){
   });
 }
 
+// small in-circle icon for the AC source showing which waveform
+// shape (sine/square/triangle/sawtooth) it's currently generating —
+// draws inside a box of half-width hw and half-height hh centered
+// on the current canvas origin. Assumes ctx.strokeStyle/lineWidth
+// are already set by the caller.
+function drawWaveIcon(ctx, type, hw, hh){
+  ctx.beginPath();
+  if (type === 'square'){
+    ctx.moveTo(-hw, hh);
+    ctx.lineTo(-hw, -hh); ctx.lineTo(0, -hh); ctx.lineTo(0, hh); ctx.lineTo(hw, hh); ctx.lineTo(hw, -hh);
+  } else if (type === 'triangle'){
+    ctx.moveTo(-hw, 0);
+    ctx.lineTo(-hw*0.5, -hh); ctx.lineTo(0, hh); ctx.lineTo(hw*0.5, -hh); ctx.lineTo(hw, 0);
+  } else if (type === 'sawtooth'){
+    ctx.moveTo(-hw, hh);
+    ctx.lineTo(0, -hh); ctx.lineTo(0, hh); ctx.lineTo(hw, -hh);
+  } else {
+    ctx.moveTo(-hw, hh*0.4);
+    ctx.bezierCurveTo(-hw*0.55, -hh, -hw*0.2, -hh, 0, 0);
+    ctx.bezierCurveTo(hw*0.2, hh, hw*0.55, hh, hw, -hh*0.4);
+  }
+  ctx.stroke();
+}
+
 function drawValueLabel(ctx, c, g, text){
   if (!c._showLabel) return;
   ctx.save();
@@ -943,16 +985,13 @@ function extractNodes(circ){
   circ.components.forEach(c=>{
     circ.allTerms(c).forEach(t=>{
       const root = uf.find(pointKey(t.pos));
-      if (!rootToNode.has(root)) rootToNode.set(root, groundRoot===null ? nextNode++ : nextNode++);
+      if (!rootToNode.has(root)) rootToNode.set(root, nextNode++);
       termNode.set(c.id+':'+t.idx, rootToNode.get(root));
     });
   });
 
-  // if no explicit ground found, treat node with most connections as implicit reference? Keep simple: no auto-ground.
-  const nodeCount = new Set(rootToNode.values()).size + (groundRoot===null ? 1 : 0);
   return {
     termNode,
-    nodeCount: Math.max(1, new Set(rootToNode.values()).size + (rootToNode.has(groundRoot) ? 0 : 0)) || 1,
     hasGround: groundRoot !== null,
     numNodes: new Set([...rootToNode.values(), 0]).size,
   };
@@ -979,7 +1018,7 @@ function buildNetlistText(circ){
       case 'capacitor': valueStr = c.params.capacitance+''; break;
       case 'inductor': valueStr = c.params.inductance+''; break;
       case 'battery': valueStr = 'DC '+c.params.voltage; break;
-      case 'acsource': valueStr = 'SIN 0 '+c.params.amplitude+' '+c.params.frequency; break;
+      case 'acsource': valueStr = (c.params.waveform||'SIN').toUpperCase()+' 0 '+c.params.amplitude+' '+c.params.frequency; break;
       case 'currentsource': valueStr = 'DC '+c.params.current; break;
       case 'switch': valueStr = c.params.closed ? 'R=0.01 (closed)' : 'R=10Meg (open)'; break;
       case 'diode': valueStr = 'VF='+c.params.vf; break;
@@ -1000,7 +1039,9 @@ function buildNetlistText(circ){
    A compact Modified-Nodal-Analysis engine in the spirit of
    ngspice's own approach: linear stamps for passive parts and
    sources, Norton companion models for C/L under backward-Euler
-   integration, and Newton-Raphson linearization for diodes.
+   integration, and Newton-Raphson linearization for diodes using
+   SPICE-style voltage limiting so forward/reverse switching (as
+   in a bridge rectifier) converges correctly within a timestep.
 ============================================================ */
 const sim = {
   info: null,
@@ -1104,9 +1145,13 @@ function assembleAndSolve(circ, dynamic, diodeGuess){
       case 'acsource': {
         const idx = sim.branchIndex[c.id];
         const t = dynamic ? state.t : 0;
-        const w0 = 2*Math.PI*parseEng(c.params.frequency);
-        const ph = (c.params.phase||0)*Math.PI/180;
-        const v = parseEng(c.params.amplitude) * Math.sin(w0*t + ph);
+        const v = acWaveformValue(
+          c.params.waveform || 'sine',
+          parseEng(c.params.amplitude),
+          parseEng(c.params.frequency),
+          c.params.phase || 0,
+          t
+        );
         stampBranchVsource(nA, nodeOf(info,c.id,1), idx, v);
         break;
       }
@@ -1148,19 +1193,46 @@ function assembleAndSolve(circ, dynamic, diodeGuess){
       }
       case 'diode': case 'led': {
         const nB = nodeOf(info,c.id,1);
-        const Vt = 0.026, Is = 1e-12 * Math.exp((c.params.vf||0.7)/Vt) * 1e-3 / (0.01);
-        // guess voltage for linearization
-        let Vg = (diodeGuess && diodeGuess[c.id]!==undefined) ? diodeGuess[c.id] : (sim.diodeV[c.id] ?? 0.5*(c.params.vf||0.7));
-        Vg = Math.max(-1, Math.min((c.params.vf||0.7)*1.5, Vg));
-        const IsEff = 1e-9; // effective saturation current tuned for stable convergence
-        const nEmis = (c.params.vf||0.7) / (Vt*Math.log((0.02/IsEff)+1)); // scale so ~Vf gives ~20mA
-        const nVt = Math.max(0.01, nEmis*Vt);
-        const ex = Math.exp(Math.min(40, Vg/nVt));
-        const Id = IsEff*(ex-1);
-        const geq = Math.max(1e-9, (IsEff/nVt)*ex);
-        const ieq = Id - geq*Vg;
-        stampG(nA,nB,geq);
-        stampI(nB,nA, -ieq); // current source contribution: -ieq from b to a == +ieq from a to b handled below
+        // --- SPICE-style diode companion model ---
+        // Shockley equation I = Is*(exp(V/nVt)-1). Is is fixed tiny
+        // (real diode leakage scale); the ideality/emission scaling
+        // (nVt) is derived per-component so that its own Vf lines up
+        // with a realistic ~20mA forward operating point. Gmin (a
+        // small parallel conductance) is always present for matrix
+        // conditioning, exactly as SPICE does — it's far too small
+        // to compromise blocking behavior (1e-12 S ~ 1 TΩ).
+        const Vt = 0.02585;                       // thermal voltage @ ~300K
+        const Vf = Math.max(0.05, c.params.vf || 0.7);
+        const Is = 1e-14;
+        const Gmin = 1e-12;
+        const nEmis = Math.max(1, Vf / (Vt * Math.log(0.02/Is + 1)));
+        const nVt = nEmis * Vt;
+
+        // linearization point, carried over from the previous NR
+        // iteration / timestep (defaults to 0V — unbiased — the
+        // first time a diode is ever evaluated)
+        let Vg = (diodeGuess && diodeGuess[c.id] !== undefined) ? diodeGuess[c.id] : (sim.diodeV[c.id] ?? 0);
+
+        // SPICE voltage limiting: only clamps *forward* excursions
+        // (where exp() would otherwise blow up numerically). Reverse
+        // excursions are left completely unclamped — a diode needs
+        // to be able to swing many volts negative within a single
+        // Newton step (e.g. at the peak of an AC half-cycle in a
+        // bridge rectifier) in order to actually shut off in time.
+        const Vcrit = nVt * Math.log(nVt / (Math.SQRT2 * Is));
+        if (Vg > Vcrit){
+          Vg = Vcrit + nVt * Math.log(1 + (Vg - Vcrit) / nVt);
+        }
+        Vg = Math.min(Vg, Vf * 4); // generous absolute forward ceiling
+
+        const ex = Math.exp(Math.min(60, Vg / nVt));
+        const Id = Is * (ex - 1);
+        const gd = (Is / nVt) * ex;      // exponential (diode) conductance
+        const geq = gd + Gmin;           // total companion conductance
+        const ieq = Id - gd * Vg;        // companion current source (Gmin cancels out)
+
+        stampG(nA, nB, geq);
+        stampI(nB, nA, -ieq);
         break;
       }
       default: break;
@@ -1182,7 +1254,7 @@ function solveDCOperatingPoint(circ){
   prepareSim(circ);
   if (!sim.info.hasGround) return null;
   let result = null, diodeGuess = {};
-  for (let iter=0; iter<25; iter++){
+  for (let iter=0; iter<60; iter++){
     result = assembleAndSolve(circ, null, diodeGuess);
     if (!result) return null;
     let maxDelta = 0;
@@ -1190,12 +1262,15 @@ function solveDCOperatingPoint(circ){
       if (c.type==='diode' || c.type==='led'){
         const nA = nodeOf(sim.info,c.id,0), nB = nodeOf(sim.info,c.id,1);
         const v = nodeVoltage(result.V,nA) - nodeVoltage(result.V,nB);
-        const prev = diodeGuess[c.id] ?? (0.5*(c.params.vf||0.7));
+        const prev = diodeGuess[c.id] ?? (sim.diodeV[c.id] ?? 0);
         maxDelta = Math.max(maxDelta, Math.abs(v-prev));
-        diodeGuess[c.id] = prev + Math.max(-0.1,Math.min(0.1, v-prev)); // damped update
+        // full Newton step: the internal Vcrit-based limiting inside
+        // assembleAndSolve already keeps the exponential well-behaved,
+        // so no additional per-iteration damping is needed here.
+        diodeGuess[c.id] = v;
       }
     });
-    if (maxDelta < 1e-5) break;
+    if (maxDelta < 1e-7) break;
   }
   circ.components.forEach(c=>{
     if (c.type==='diode' || c.type==='led') sim.diodeV[c.id] = diodeGuess[c.id];
@@ -1207,7 +1282,7 @@ function stepTransient(circ, dt){
   if (!sim.info || !sim.info.hasGround) prepareSim(circ);
   if (!sim.info.hasGround) return null;
   let result=null, diodeGuess={};
-  for (let iter=0; iter<15; iter++){
+  for (let iter=0; iter<40; iter++){
     result = assembleAndSolve(circ, {dt}, diodeGuess);
     if (!result) return null;
     let maxDelta=0;
@@ -1215,12 +1290,12 @@ function stepTransient(circ, dt){
       if (c.type==='diode' || c.type==='led'){
         const nA = nodeOf(sim.info,c.id,0), nB = nodeOf(sim.info,c.id,1);
         const v = nodeVoltage(result.V,nA)-nodeVoltage(result.V,nB);
-        const prev = diodeGuess[c.id] ?? (sim.diodeV[c.id] ?? 0.5*(c.params.vf||0.7));
+        const prev = diodeGuess[c.id] ?? (sim.diodeV[c.id] ?? 0);
         maxDelta = Math.max(maxDelta, Math.abs(v-prev));
-        diodeGuess[c.id] = prev + Math.max(-0.08,Math.min(0.08, v-prev));
+        diodeGuess[c.id] = v;
       }
     });
-    if (maxDelta < 1e-5) break;
+    if (maxDelta < 1e-6) break;
   }
   // commit companion state for next step
   circ.components.forEach(c=>{
@@ -1808,6 +1883,11 @@ function updatePropsPanel(){
         <input type="range" data-key="${pd.key}" class="pf-slider" min="${pd.min}" max="${pd.max}" step="${pd.step}" value="${val}"></div>`;
     } else if (pd.type === 'color'){
       html += `<div class="field"><label>${pd.label}</label><input type="color" data-key="${pd.key}" class="pf-color" value="${val}" style="height:34px;padding:2px;"></div>`;
+    } else if (pd.type === 'select'){
+      const curVal = (val === undefined || val === null) ? pd.options[0] : val;
+      html += `<div class="field"><label>${pd.label}</label><select data-key="${pd.key}" class="pf-select">
+        ${pd.options.map(o=>`<option value="${o}" ${o===curVal?'selected':''}>${o.charAt(0).toUpperCase()+o.slice(1)}</option>`).join('')}
+      </select></div>`;
     }
   });
 
@@ -1844,6 +1924,12 @@ function updatePropsPanel(){
   });
   content.querySelectorAll('.pf-color').forEach(inp=>{
     inp.addEventListener('input', ()=>{ c.params[inp.dataset.key] = inp.value; renderAll(); });
+  });
+  content.querySelectorAll('.pf-select').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      c.params[inp.dataset.key] = inp.value;
+      renderAll(); refreshNetlist();
+    });
   });
 
   updatePropReadouts(c);
@@ -2201,7 +2287,7 @@ const EXAMPLES = {
     title:'Series RLC', desc:'AC source driving R, L and C in series.',
     build(c){
       c.clear();
-      const ac = c.addComponent('acsource', -6, -2, 3, {amplitude:5, frequency:60});
+      const ac = c.addComponent('acsource', -6, -2, 3, {amplitude:5, frequency:60, waveform:'sine'});
       const r = c.addComponent('resistor', -1, -6, 1, {resistance:100});
       const l = c.addComponent('inductor', 3, -6, 1, {inductance:0.05});
       const cap = c.addComponent('capacitor', 6, -2, 3, {capacitance:1e-5});
@@ -2272,9 +2358,6 @@ document.getElementById('btn-fit').addEventListener('click', ()=>{
    wires, component strokes, scope background) don't automatically
    pick up CSS custom-property changes, so we mirror the active
    theme into `state.theme` and force a repaint + palette rebuild.
-   This is the fix for "dark/light theme toggle does nothing":
-   previously nothing ever re-rendered the canvases on toggle, and
-   styles.css had no [data-theme="light"] tokens to switch to.
 ============================================================ */
 window.onThemeChange = function(theme){
   state.theme = (theme === 'light') ? 'light' : 'dark';
@@ -2286,10 +2369,6 @@ window.onThemeChange = function(theme){
 
 /* ============================================================
    12. BOOT
-   Everything above only *defines* behavior — nothing actually
-   ran on load in the original build (canvases were never sized,
-   the palette was never populated, tool state was never synced
-   to the toolbar). This section wires it all together.
 ============================================================ */
 function boot(){
   // pick up whatever theme index.html's inline script already applied
